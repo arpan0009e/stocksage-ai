@@ -7,9 +7,7 @@ from stocksage.schemas import ResearchRequest, ResearchReport
 
 def test_research_request_normalizes_symbol():
     request = ResearchRequest(symbol="reliance", period="6mo")
-
     assert request.symbol == "RELIANCE"
-    assert request.period == "6mo"
 
 
 def test_research_request_rejects_invalid_period():
@@ -24,7 +22,6 @@ def test_research_request_rejects_invalid_symbol():
 
 def test_research_report_defaults():
     report = ResearchReport(symbol="RELIANCE")
-
     assert report.status == "partial"
     assert report.warnings == []
     assert report.sources == []

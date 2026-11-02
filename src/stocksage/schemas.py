@@ -10,11 +10,7 @@ class ResearchRequest(BaseModel):
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    symbol: str = Field(
-        min_length=1,
-        max_length=30,
-        description="Company symbol accepted by the configured data provider",
-    )
+    symbol: str = Field(min_length=1, max_length=30)
     period: Literal["1mo", "3mo", "6mo", "1y", "2y"] = "6mo"
 
     @field_validator("symbol")
@@ -22,14 +18,14 @@ class ResearchRequest(BaseModel):
     def normalize_symbol(cls, value: str) -> str:
         value = value.upper()
 
-        if not all(char.isalnum() or char in ".&-" for char in value):
+        if not all(c.isalnum() or c in ".&-" for c in value):
             raise ValueError("Symbol contains unsupported characters")
 
         return value
 
 
 class ResearchReport(BaseModel):
-    """Initial structured output for a research run."""
+    """Structured result for a company research run."""
 
     symbol: str
     generated_at: datetime = Field(
