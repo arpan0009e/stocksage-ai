@@ -34,4 +34,5 @@ class ResearchReport(BaseModel):
     status: Literal["complete", "partial", "failed"] = "partial"
     summary: str = ""
     warnings: list[str] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
     sources: list[str] = Field(default_factory=list)
