@@ -25,11 +25,20 @@ def main() -> None:
         {"symbol": args.symbol, "period": args.period}
     )
 
-    print(json.dumps({
-        "report": result.get("report"),
-        "metrics": result.get("metrics"),
-        "trace": result.get("trace"),
-    }, indent=2, default=str))
+  
+    print(
+        json.dumps(
+            {
+                "report": result.get("report"),
+                "metrics": result.get("metrics"),
+                "fundamentals": result.get("fundamentals"),
+                "trace": result.get("trace"),
+            },
+            indent=2,
+            default=str,
+        )
+    )
+
 
 
 if __name__ == "__main__":
