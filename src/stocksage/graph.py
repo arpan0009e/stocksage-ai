@@ -7,6 +7,7 @@ from pydantic import ValidationError
 from stocksage.fundamentals import analyze_fundamentals
 from stocksage.market_data import MarketDataError, fetch_historical_prices
 from stocksage.market_metrics import calculate_market_metrics
+from stocksage.news_agent import NewsDataError, fetch_company_news
 from stocksage.schemas import ResearchReport, ResearchRequest
 
 
@@ -16,6 +17,7 @@ class ResearchState(TypedDict, total=False):
     request: dict[str, Any]
     metrics: dict[str, Any]
     fundamentals: dict[str, Any]
+    news: dict[str, Any]
     warnings: list[str]
     errors: list[str]
     sources: list[str]
@@ -56,8 +58,7 @@ def market_agent(state: ResearchState) -> dict[str, Any]:
 
     try:
         prices = fetch_historical_prices(
-            state["symbol"],
-            state["period"],
+            state["symbol"], state["period"]
         )
         metrics = calculate_market_metrics(prices)
 
@@ -82,7 +83,6 @@ def market_agent(state: ResearchState) -> dict[str, Any]:
             "errors": [f"Market analysis failed: {exc}"],
             "trace": trace,
         }
-
     except Exception as exc:
         return {
             "errors": [
@@ -102,31 +102,76 @@ def fundamentals_agent(state: ResearchState) -> dict[str, Any]:
     try:
         result = analyze_fundamentals(state["symbol"])
 
-        fundamentals = result.model_dump(mode="json")
-        warnings = [
-            *state.get("warnings", []),
-            *result.warnings,
-        ]
-        sources = [
-            *state.get("sources", []),
-            *result.sources,
-        ]
-
         return {
-            "fundamentals": fundamentals,
-            "warnings": warnings,
-            "sources": list(dict.fromkeys(sources)),
+            "fundamentals": result.model_dump(mode="json"),
+            "warnings": [
+                *state.get("warnings", []),
+                *result.warnings,
+            ],
+            "sources": list(
+                dict.fromkeys([
+                    *state.get("sources", []),
+                    *result.sources,
+                ])
+            ),
             "trace": trace,
         }
 
     except Exception as exc:
-        # Fundamental data is optional for the MVP. Preserve market results.
         return {
             "fundamentals": {},
             "warnings": [
                 *state.get("warnings", []),
                 (
                     "Fundamentals analysis was unavailable: "
+                    f"{type(exc).__name__}: {exc}"
+                ),
+            ],
+            "trace": trace,
+        }
+
+
+def news_agent(state: ResearchState) -> dict[str, Any]:
+    trace = [*state.get("trace", []), "news_agent"]
+
+    try:
+        result = fetch_company_news(
+            state["symbol"],
+            max_articles=10,
+        )
+
+        return {
+            "news": result.model_dump(mode="json"),
+            "warnings": [
+                *state.get("warnings", []),
+                *result.warnings,
+            ],
+            "sources": list(
+                dict.fromkeys([
+                    *state.get("sources", []),
+                    *result.sources,
+                ])
+            ),
+            "trace": trace,
+        }
+
+    except (NewsDataError, ValueError) as exc:
+        return {
+            "news": {},
+            "warnings": [
+                *state.get("warnings", []),
+                f"News retrieval was unavailable: {exc}",
+            ],
+            "trace": trace,
+        }
+
+    except Exception as exc:
+        return {
+            "news": {},
+            "warnings": [
+                *state.get("warnings", []),
+                (
+                    "Unexpected news-tool error: "
                     f"{type(exc).__name__}: {exc}"
                 ),
             ],
@@ -141,11 +186,7 @@ def build_success_report(state: ResearchState) -> dict[str, Any]:
     report = ResearchReport(
         symbol=state["symbol"],
         status="partial" if warnings else "complete",
-        summary=(
-            "Market and fundamentals analysis completed."
-            if state.get("fundamentals")
-            else "Market analysis completed; fundamentals data is unavailable."
-        ),
+        summary="Market, fundamentals, and news analysis completed.",
         warnings=warnings,
         sources=state.get("sources", []),
     )
@@ -158,14 +199,13 @@ def build_success_report(state: ResearchState) -> dict[str, Any]:
 
 def build_failure_report(state: ResearchState) -> dict[str, Any]:
     trace = [*state.get("trace", []), "build_failure_report"]
-    errors = state.get("errors", ["Unknown workflow failure."])
 
     report = ResearchReport(
         symbol=state.get("symbol", "UNKNOWN"),
         status="failed",
         summary="Market research could not be completed.",
         warnings=state.get("warnings", []),
-        errors=errors,
+        errors=state.get("errors", ["Unknown workflow failure."]),
         sources=state.get("sources", []),
     )
 
@@ -181,6 +221,7 @@ def build_graph():
     builder.add_node("validate_request", validate_request)
     builder.add_node("market_agent", market_agent)
     builder.add_node("fundamentals_agent", fundamentals_agent)
+    builder.add_node("news_agent", news_agent)
     builder.add_node("build_success_report", build_success_report)
     builder.add_node("build_failure_report", build_failure_report)
 
@@ -204,7 +245,8 @@ def build_graph():
         },
     )
 
-    builder.add_edge("fundamentals_agent", "build_success_report")
+    builder.add_edge("fundamentals_agent", "news_agent")
+    builder.add_edge("news_agent", "build_success_report")
     builder.add_edge("build_success_report", END)
     builder.add_edge("build_failure_report", END)
 

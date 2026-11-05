@@ -26,18 +26,21 @@ def main() -> None:
     )
 
   
+    
     print(
         json.dumps(
             {
                 "report": result.get("report"),
                 "metrics": result.get("metrics"),
                 "fundamentals": result.get("fundamentals"),
+                "news": result.get("news"),
                 "trace": result.get("trace"),
             },
             indent=2,
             default=str,
         )
     )
+
 
 
 
